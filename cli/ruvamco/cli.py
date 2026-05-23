@@ -232,7 +232,9 @@ def logs(tail, component, follow):
                 continue
 
         return
-    except Exception:
+    except Exception as e:
+        if "RUVAMCO_DEBUG" in os.environ:
+            click.echo(f"ℹ️  CloudWatch fallback triggered: {e}", err=True)
         pass  # Fall through to Docker
 
     # Fallback: docker-compose logs (local development)
