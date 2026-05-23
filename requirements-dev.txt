@@ -1,0 +1,27 @@
+# Production dependencies
+fastapi>=0.110,<1
+uvicorn[standard]>=0.29,<1
+pydantic>=2.6,<3
+boto3>=1.34,<2
+botocore>=1.34,<2
+PyJWT>=2.8,<3
+python-dotenv>=1.0,<2
+structlog>=24.1,<25
+prometheus-client>=0.20,<1
+grpcio>=1.62,<2
+grpcio-tools>=1.62,<2
+Jinja2>=3.1,<4
+PyYAML>=6.0,<7
+click>=8.1,<9
+requests>=2.31,<3
+tabulate>=0.9,<1
+rich>=13.0,<14
+
+# Development and testing dependencies
+pytest>=7.4,<8
+pytest-cov>=4.1,<5
+coverage>=7.3,<8
+black>=23.10,<24
+flake8>=6.1,<7
+mypy>=1.6,<2
+bandit>=1.7,<2
