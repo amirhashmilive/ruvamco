@@ -77,7 +77,7 @@ services:
   
   # RUVAMCO Control Plane
   control-plane:
-    build: ./control-plane
+    build: ./control_plane
     container_name: ruvamco-control-plane
     ports:
       - "8081:8080"

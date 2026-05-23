@@ -56,7 +56,7 @@ source venv/bin/activate
 pip install --upgrade pip setuptools wheel -q
 pip install -r broker/requirements.txt -q
 pip install -r worker/requirements.txt -q
-pip install -r control-plane/requirements.txt -q
+pip install -r control_plane/requirements.txt -q
 pip install -e ./cli -q
 pip install pytest pytest-asyncio pytest-cov black flake8 mypy bandit -q
 ok "Dependencies installed"

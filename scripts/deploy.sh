@@ -49,11 +49,15 @@ SERVICES=("broker" "worker" "control-plane")
 
 for svc in "${SERVICES[@]}"; do
   log "  Building ${svc}..."
+  DIR_NAME="${svc}"
+  if [ "$svc" = "control-plane" ]; then
+    DIR_NAME="control_plane"
+  fi
   docker build \
     -t "ruvamco/${svc}:${VERSION}" \
     -t "ruvamco/${svc}:latest" \
-    -f "${ROOT_DIR}/${svc}/Dockerfile" \
-    "${ROOT_DIR}/${svc}"
+    -f "${ROOT_DIR}/${DIR_NAME}/Dockerfile" \
+    "${ROOT_DIR}/${DIR_NAME}"
   ok "${svc} built"
 done
 

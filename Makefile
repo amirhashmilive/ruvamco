@@ -28,16 +28,16 @@ build:
 
 test:
 	@echo "🧪 Running tests..."
-	pytest tests/unit/ -v --cov=broker --cov=worker --cov=control-plane
+	pytest tests/unit/ -v --cov=broker --cov=worker --cov=control_plane
 	pytest tests/integration/ -v
 	pytest tests/e2e/ -v
 	@echo "✅ Tests complete"
 
 lint:
 	@echo "🔍 Running linters..."
-	black broker/ worker/ control-plane/ cli/ tests/
-	flake8 broker/ worker/ control-plane/ cli/ tests/
-	mypy broker/ worker/ control-plane/
+	black broker/ worker/ control_plane/ cli/ tests/
+	flake8 broker/ worker/ control_plane/ cli/ tests/
+	mypy broker/ worker/ control_plane/
 	@echo "✅ Linting complete"
 
 up:
@@ -73,7 +73,7 @@ deploy:
 
 docs:
 	@echo "📚 Generating documentation..."
-	pdoc --html --output-dir docs/ broker/ worker/ control-plane/ cli/
+	pdoc --html --output-dir docs/ broker/ worker/ control_plane/ cli/
 	@echo "✅ Documentation generated in docs/"
 
 logs:

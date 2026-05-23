@@ -17,7 +17,7 @@ jobs:
     
     strategy:
       matrix:
-        component: [broker, worker, control-plane, cli]
+        component: [broker, worker, control_plane, cli]
     
     steps:
     - uses: actions/checkout@v4
@@ -92,7 +92,7 @@ jobs:
     - name: Build and push Control Plane
       uses: docker/build-push-action@v5
       with:
-        context: ./control-plane
+        context: ./control_plane
         push: true
         tags: ruvamco/control-plane:latest,ruvamco/control-plane:${{ github.sha }}
     
