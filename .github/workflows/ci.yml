@@ -1,0 +1,133 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  GO_VERSION: '1.21'
+  RUST_VERSION: '1.74'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        component: [broker, worker, control-plane, cli]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements-dev.txt
+        pip install -e ./cli
+    
+    - name: Run tests
+      run: |
+        pytest tests/unit/test_${{ matrix.component }}.py -v --cov=${{ matrix.component }}
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: ${{ matrix.component }}
+    
+    - name: Lint
+      run: |
+        black --check ${{ matrix.component }}/
+        flake8 ${{ matrix.component }}/
+        mypy ${{ matrix.component }}/
+    
+    - name: Security scan
+      run: |
+        bandit -r ${{ matrix.component }}/ -ll
+  
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_TOKEN }}
+    
+    - name: Build and push Broker
+      uses: docker/build-push-action@v5
+      with:
+        context: ./broker
+        push: true
+        tags: ruvamco/broker:latest,ruvamco/broker:${{ github.sha }}
+    
+    - name: Build and push Worker
+      uses: docker/build-push-action@v5
+      with:
+        context: ./worker
+        push: true
+        tags: ruvamco/worker:latest,ruvamco/worker:${{ github.sha }}
+    
+    - name: Build and push Control Plane
+      uses: docker/build-push-action@v5
+      with:
+        context: ./control-plane
+        push: true
+        tags: ruvamco/control-plane:latest,ruvamco/control-plane:${{ github.sha }}
+    
+    - name: Build and push CLI
+      uses: docker/build-push-action@v5
+      with:
+        context: ./cli
+        push: true
+        tags: ruvamco/cli:latest,ruvamco/cli:${{ github.sha }}
+  
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+    
+    - name: Terraform Init
+      run: cd terraform && terraform init
+    
+    - name: Terraform Plan
+      run: cd terraform && terraform plan
+      
+    - name: Terraform Apply
+      run: cd terraform && terraform apply -auto-approve

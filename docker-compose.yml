@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  # Local DynamoDB for development
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: ruvamco-dynamodb
+    ports:
+      - "8000:8000"
+    command: -jar DynamoDBLocal.jar -sharedDb -dbPath ./data
+    volumes:
+      - ./data/dynamodb:/home/dynamodblocal/data
+  
+  # Local SQS replacement (ElasticMQ)
+  elasticmq:
+    image: softwaremill/elasticmq:latest
+    container_name: ruvamco-sqs
+    ports:
+      - "9324:9324"
+      - "9325:9325"
+    volumes:
+      - ./elasticmq.conf:/opt/elasticmq.conf
+  
+  # Local S3 replacement (MinIO)
+  minio:
+    image: minio/minio:latest
+    container_name: ruvamco-s3
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - ./data/minio:/data
+  
+  # RUVAMCO Broker API
+  broker:
+    build: ./broker
+    container_name: ruvamco-broker
+    ports:
+      - "8080:8080"
+    environment:
+      ENVIRONMENT: development
+      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+      SQS_ENDPOINT: http://elasticmq:9324
+      S3_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: us-east-1
+    depends_on:
+      - dynamodb-local
+      - elasticmq
+      - minio
+    command: uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+  
+  # RUVAMCO Worker
+  worker:
+    build: ./worker
+    container_name: ruvamco-worker
+    environment:
+      ENVIRONMENT: development
+      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+      SQS_ENDPOINT: http://elasticmq:9324
+      S3_ENDPOINT: http://minio:9000
+      CONTROL_PLANE_URL: http://control-plane:8080
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: us-east-1
+    depends_on:
+      - dynamodb-local
+      - elasticmq
+      - minio
+      - control-plane
+    command: python main.py
+  
+  # RUVAMCO Control Plane
+  control-plane:
+    build: ./control-plane
+    container_name: ruvamco-control-plane
+    ports:
+      - "8081:8080"
+      - "18000:18000"
+    environment:
+      ENVIRONMENT: development
+      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+      S3_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: us-east-1
+    depends_on:
+      - dynamodb-local
+      - minio
+    command: uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+
+  # Envoy Proxy (development)
+  envoy:
+    image: envoyproxy/envoy:v1.28-latest
+    container_name: ruvamco-envoy
+    ports:
+      - "10000:10000"
+      - "9901:9901"
+    volumes:
+      - ./envoy-config.yaml:/etc/envoy/envoy.yaml
+    command: -c /etc/envoy/envoy.yaml --log-level info
+  
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ruvamco-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml
+  
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ruvamco-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./monitoring/grafana/dashboard.json:/etc/grafana/provisioning/dashboards/ruvamco.json
+  
+  # Jaeger for tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: ruvamco-jaeger
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+
+networks:
+  default:
+    name: ruvamco-network
