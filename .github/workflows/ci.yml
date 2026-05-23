@@ -70,9 +70,10 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install --upgrade pip
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov pytest-asyncio
         pip install -r requirements-dev.txt
-        pip install -e ./cli 2>/dev/null || echo "CLI installation skipped"
+        pip install -e ./cli
     
     - name: Run tests for ${{ matrix.component }}
       continue-on-error: true
