@@ -1,0 +1,199 @@
+---
+# ── Broker Deployment ────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruvamco-broker
+  namespace: ruvamco
+  labels:
+    app.kubernetes.io/name: ruvamco-broker
+    app.kubernetes.io/component: broker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ruvamco-broker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ruvamco-broker
+        app.kubernetes.io/component: broker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: ruvamco
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: broker
+          image: ruvamco/broker:latest
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: ruvamco-config
+            - secretRef:
+                name: ruvamco-secrets
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ruvamco-broker
+
+---
+# ── Worker Deployment ────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruvamco-worker
+  namespace: ruvamco
+  labels:
+    app.kubernetes.io/name: ruvamco-worker
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ruvamco-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ruvamco-worker
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: ruvamco
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: ruvamco/worker:latest
+          envFrom:
+            - configMapRef:
+                name: ruvamco-config
+            - secretRef:
+                name: ruvamco-secrets
+          env:
+            - name: CONTROL_PLANE_URL
+              value: "http://ruvamco-control-plane:8080"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+
+---
+# ── Control Plane Deployment ─────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruvamco-control-plane
+  namespace: ruvamco
+  labels:
+    app.kubernetes.io/name: ruvamco-control-plane
+    app.kubernetes.io/component: control-plane
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ruvamco-control-plane
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ruvamco-control-plane
+        app.kubernetes.io/component: control-plane
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: ruvamco
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: control-plane
+          image: ruvamco/control-plane:latest
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 18000
+              name: grpc
+          envFrom:
+            - configMapRef:
+                name: ruvamco-config
+            - secretRef:
+                name: ruvamco-secrets
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ruvamco-control-plane

@@ -1,0 +1,69 @@
+# ─────────────────────────────────────────────────────────────────
+# RUVAMCO — Advanced Edge Route Configuration
+#
+# Enterprise-grade proxy with JWT auth, mTLS, circuit breakers,
+# retries, CORS, custom headers, and CDN.
+# ─────────────────────────────────────────────────────────────────
+
+apiVersion: ruvamco/v1
+kind: EdgeRoute
+metadata:
+  name: payments-api
+  namespace: payments
+  labels:
+    team: payments
+    tier: critical
+spec:
+  plan: enterprise
+  domain: payments.mycompany.com
+  backend:
+    type: kubernetes
+    target: payments-service.payments.svc.cluster.local
+    port: 8443
+    protocol: HTTP2
+    health_check_path: /healthz
+  auth:
+    type: jwt
+    jwksUrl: https://auth.mycompany.com/.well-known/jwks.json
+    issuer: https://auth.mycompany.com
+    audiences:
+      - payments-api
+      - internal-services
+  rateLimit:
+    requestsPerSecond: 10000
+    burst: 20000
+    per: api_key
+  timeouts:
+    request: 60
+    connection: 10
+    idle: 600
+  retries:
+    attempts: 3
+    perTryTimeout: 15
+    retryOn: 5xx,reset,connect-failure,retriable-4xx
+  circuitBreaker:
+    maxConnections: 2048
+    maxPendingRequests: 2048
+    maxRequests: 2048
+    maxRetries: 5
+  cors:
+    allowOrigins:
+      - https://dashboard.mycompany.com
+      - https://admin.mycompany.com
+    allowMethods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    allowHeaders:
+      - Authorization
+      - Content-Type
+      - X-Request-ID
+    maxAge: 86400
+  customHeaders:
+    X-Service-Name: payments-api
+    X-Environment: production
+    Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+  tags:
+    compliance: pci-dss
+    data-classification: confidential

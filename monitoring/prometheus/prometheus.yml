@@ -1,0 +1,97 @@
+# ─────────────────────────────────────────────────────────────────
+# RUVAMCO — Prometheus Configuration
+# ─────────────────────────────────────────────────────────────────
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: ruvamco-production
+    environment: production
+
+rule_files:
+  - alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  # ── Self-monitoring ──────────────────────────────────────────
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── RUVAMCO Broker API ───────────────────────────────────────
+  - job_name: ruvamco-broker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["broker:8080"]
+        labels:
+          service: broker
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # ── RUVAMCO Control Plane ────────────────────────────────────
+  - job_name: ruvamco-control-plane
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["control-plane:8080"]
+        labels:
+          service: control-plane
+
+  # ── Envoy Proxy Fleet ────────────────────────────────────────
+  - job_name: envoy
+    metrics_path: /stats/prometheus
+    static_configs:
+      - targets: ["envoy:9901"]
+        labels:
+          service: envoy-proxy
+
+  # ── Observability Sidecar ────────────────────────────────────
+  - job_name: ruvamco-observability
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["observability:8083"]
+        labels:
+          service: observability-sidecar
+
+  # ── Rate Limit Sidecar ──────────────────────────────────────
+  - job_name: ruvamco-ratelimit
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ratelimit:8082"]
+        labels:
+          service: ratelimit-sidecar
+
+  # ── Node Exporter (infrastructure) ──────────────────────────
+  - job_name: node-exporter
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # ── Kubernetes Service Discovery ────────────────────────────
+  - job_name: kubernetes-pods
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: pod

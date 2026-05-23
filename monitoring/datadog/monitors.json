@@ -1,0 +1,51 @@
+{
+  "monitors": [
+    {
+      "name": "RUVAMCO Broker — High Error Rate",
+      "type": "metric alert",
+      "query": "avg(last_5m):sum:ruvamco.proxy.requests.total{status_code:5xx}.as_rate() / sum:ruvamco.proxy.requests.total{*}.as_rate() > 0.01",
+      "message": "@pagerduty-ruvamco Error rate exceeds 1% on the RUVAMCO proxy fleet. Check broker logs and upstream health.",
+      "tags": ["team:platform", "service:ruvamco", "severity:critical"],
+      "options": {
+        "thresholds": { "critical": 0.01, "warning": 0.005 },
+        "notify_no_data": true,
+        "evaluation_delay": 60,
+        "renotify_interval": 300
+      }
+    },
+    {
+      "name": "RUVAMCO Control Plane — High Latency",
+      "type": "metric alert",
+      "query": "avg(last_5m):p95:ruvamco.config.propagation.seconds{*} > 5",
+      "message": "@slack-ruvamco-alerts Config propagation p95 latency exceeds 5s SLO.",
+      "tags": ["team:platform", "service:ruvamco", "severity:warning"],
+      "options": {
+        "thresholds": { "critical": 10, "warning": 5 },
+        "notify_no_data": false,
+        "renotify_interval": 600
+      }
+    },
+    {
+      "name": "RUVAMCO — Provisioning Queue Backlog",
+      "type": "metric alert",
+      "query": "avg(last_5m):avg:aws.sqs.approximate_number_of_messages_visible{queuename:ruvamco-tasks} > 100",
+      "message": "@slack-ruvamco-alerts SQS queue backlog is {{ value }}. Workers may be under-scaled.",
+      "tags": ["team:platform", "service:ruvamco", "severity:warning"],
+      "options": {
+        "thresholds": { "critical": 500, "warning": 100 },
+        "notify_no_data": false,
+        "renotify_interval": 600
+      }
+    },
+    {
+      "name": "RUVAMCO — Service Health Check",
+      "type": "service check",
+      "query": "\"http.can_connect\".over(\"instance:broker.ruvamco.io\").by(\"*\").last(3).count_by_status()",
+      "message": "@pagerduty-ruvamco RUVAMCO Broker health check failing.",
+      "tags": ["team:platform", "service:ruvamco", "severity:critical"],
+      "options": {
+        "thresholds": { "critical": 3, "warning": 1, "ok": 1 }
+      }
+    }
+  ]
+}

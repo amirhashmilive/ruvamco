@@ -1,0 +1,25 @@
+# ─────────────────────────────────────────────────────────────────
+# RUVAMCO — Basic Edge Route Configuration
+#
+# Provisions a simple HTTP proxy with default rate limiting.
+# ─────────────────────────────────────────────────────────────────
+
+apiVersion: ruvamco/v1
+kind: EdgeRoute
+metadata:
+  name: my-api
+  namespace: default
+spec:
+  plan: developer
+  domain: api.example.com
+  backend:
+    type: kubernetes
+    target: my-service.default.svc.cluster.local
+    port: 8080
+    health_check_path: /health
+  rateLimit:
+    requestsPerSecond: 100
+    burst: 200
+  timeouts:
+    request: 30
+    connection: 5

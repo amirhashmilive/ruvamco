@@ -1,0 +1,90 @@
+# ─────────────────────────────────────────────────────────────────
+# RUVAMCO — Prometheus Alert Rules
+# ─────────────────────────────────────────────────────────────────
+
+groups:
+  - name: ruvamco.availability
+    rules:
+      - alert: BrokerDown
+        expr: up{job="ruvamco-broker"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "RUVAMCO Broker is down"
+          description: "Broker instance {{ $labels.instance }} has been unreachable for > 1 minute."
+
+      - alert: ControlPlaneDown
+        expr: up{job="ruvamco-control-plane"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "RUVAMCO Control Plane is down"
+          description: "Control plane {{ $labels.instance }} has been unreachable for > 1 minute."
+
+      - alert: EnvoyProxyDown
+        expr: up{job="envoy"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Envoy proxy instance is down"
+          description: "Envoy proxy {{ $labels.instance }} is unreachable."
+
+  - name: ruvamco.performance
+    rules:
+      - alert: HighProvisioningLatency
+        expr: histogram_quantile(0.95, rate(ruvamco_provisioning_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Provisioning latency exceeds 30s (p95)"
+          description: "p95 provisioning latency is {{ $value }}s, exceeding the 30s SLO."
+
+      - alert: HighErrorRate
+        expr: rate(ruvamco_proxy_requests_total{status_code=~"5.."}[5m]) / rate(ruvamco_proxy_requests_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Error rate exceeds 1%"
+          description: "5xx error rate is {{ $value | humanizePercentage }}."
+
+      - alert: HighCPUUsage
+        expr: avg(rate(container_cpu_usage_seconds_total{namespace="ruvamco"}[5m])) by (pod) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High CPU usage on {{ $labels.pod }}"
+          description: "CPU usage is {{ $value | humanizePercentage }} for > 10 minutes."
+
+  - name: ruvamco.capacity
+    rules:
+      - alert: QueueBacklog
+        expr: aws_sqs_approximate_number_of_messages_visible > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "SQS queue backlog exceeds 100 messages"
+          description: "{{ $value }} messages are waiting in the provisioning queue."
+
+      - alert: HighActiveConnections
+        expr: ruvamco_proxy_active_connections > 50000
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High active connections on proxy fleet"
+          description: "{{ $value }} active connections detected."

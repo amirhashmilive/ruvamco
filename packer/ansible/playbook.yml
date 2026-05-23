@@ -1,0 +1,146 @@
+---
+# ─────────────────────────────────────────────────────────────────
+# RUVAMCO — Ansible Playbook for Proxy Image Provisioning
+# ─────────────────────────────────────────────────────────────────
+
+- name: Configure RUVAMCO Proxy Instance
+  hosts: all
+  become: true
+
+  vars:
+    envoy_version: "1.28.1"
+    cloudwatch_agent_url: "https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm"
+
+  tasks:
+    - name: Update all packages
+      dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+
+    - name: Install essential packages
+      dnf:
+        name:
+          - curl
+          - jq
+          - unzip
+          - htop
+          - iotop
+          - sysstat
+          - strace
+          - tcpdump
+          - nmap-ncat
+        state: present
+
+    - name: Install CloudWatch agent
+      dnf:
+        name: "{{ cloudwatch_agent_url }}"
+        state: present
+        disable_gpg_check: true
+
+    - name: Configure CloudWatch agent
+      copy:
+        dest: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+        content: |
+          {
+            "logs": {
+              "logs_collected": {
+                "files": {
+                  "collect_list": [
+                    {
+                      "file_path": "/var/log/envoy/envoy.log",
+                      "log_group_name": "/ruvamco/proxy/envoy",
+                      "log_stream_name": "{instance_id}",
+                      "retention_in_days": 30
+                    }
+                  ]
+                }
+              }
+            },
+            "metrics": {
+              "namespace": "RUVAMCO/Proxy",
+              "metrics_collected": {
+                "cpu": { "measurement": ["cpu_usage_idle", "cpu_usage_system", "cpu_usage_user"] },
+                "disk": { "measurement": ["used_percent"] },
+                "mem": { "measurement": ["mem_used_percent"] },
+                "net": { "measurement": ["bytes_sent", "bytes_recv", "packets_sent", "packets_recv"] }
+              }
+            }
+          }
+        mode: "0644"
+
+    - name: Enable CloudWatch agent
+      systemd:
+        name: amazon-cloudwatch-agent
+        enabled: true
+        state: started
+
+    - name: Create envoy config directory
+      file:
+        path: /etc/envoy
+        state: directory
+        owner: envoy
+        group: envoy
+        mode: "0755"
+
+    - name: Deploy base envoy config
+      copy:
+        dest: /etc/envoy/envoy.yaml
+        content: |
+          # Bootstrap configuration — overridden by xDS at runtime
+          node:
+            id: "{{ '{{' }} ansible_hostname {{ '}}' }}"
+            cluster: ruvamco-proxy
+
+          dynamic_resources:
+            ads_config:
+              api_type: GRPC
+              transport_api_version: V3
+              grpc_services:
+                - envoy_grpc:
+                    cluster_name: xds_cluster
+            lds_config:
+              resource_api_version: V3
+              ads: {}
+            cds_config:
+              resource_api_version: V3
+              ads: {}
+
+          static_resources:
+            clusters:
+              - name: xds_cluster
+                type: STRICT_DNS
+                connect_timeout: 5s
+                typed_extension_protocol_options:
+                  envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+                    "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+                    explicit_http_config:
+                      http2_protocol_options: {}
+                load_assignment:
+                  cluster_name: xds_cluster
+                  endpoints:
+                    - lb_endpoints:
+                        - endpoint:
+                            address:
+                              socket_address:
+                                address: control-plane.ruvamco.internal
+                                port_value: 18000
+
+          admin:
+            address:
+              socket_address:
+                address: 0.0.0.0
+                port_value: 9901
+        owner: envoy
+        group: envoy
+        mode: "0644"
+
+    - name: Set ulimits for envoy
+      copy:
+        dest: /etc/security/limits.d/99-envoy.conf
+        content: |
+          envoy soft nofile 65536
+          envoy hard nofile 65536
+          envoy soft nproc  65536
+          envoy hard nproc  65536
+        mode: "0644"

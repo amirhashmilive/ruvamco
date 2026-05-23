@@ -13,6 +13,7 @@ from datetime import datetime
 import boto3
 import grpc
 from concurrent import futures
+import logging
 
 from .xds_server import AggregatedDiscoveryService
 from .context_manager import ContextManager
@@ -79,9 +80,15 @@ async def get_status():
         "timestamp": datetime.utcnow().isoformat()
     }
 
+class ReloadRequest(BaseModel):
+    """Request body for reload endpoint"""
+    instance_id: str
+
+
 @app.post("/v1/reload")
-async def trigger_reload(instance_id: str):
+async def trigger_reload(request: ReloadRequest):
     """Force configuration reload for instance"""
+    instance_id = request.instance_id
     
     logger.info(f"Reload triggered for {instance_id}")
     

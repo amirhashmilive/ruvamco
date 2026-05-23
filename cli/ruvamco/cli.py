@@ -193,13 +193,66 @@ def delete(instance_id, force):
 
 @cli.command()
 @click.option('--tail', default=50, help='Number of lines to tail')
-def logs(tail):
+@click.option('--component', type=click.Choice(['broker', 'worker', 'control-plane', 'all']),
+              default='all', help='Component to fetch logs for')
+@click.option('--follow', '-f', is_flag=True, help='Follow log output')
+def logs(tail, component, follow):
     """View platform logs"""
-    
+
     click.echo(f"📋 Fetching last {tail} log entries...")
-    
-    # This would integrate with your logging system (CloudWatch, Loki, etc.)
-    click.echo("⚠️  Log integration not configured. Set up CloudWatch or Loki.")
+
+    # Try CloudWatch first (production)
+    try:
+        import boto3
+
+        logs_client = boto3.client('logs')
+        log_group = os.environ.get('RUVAMCO_LOG_GROUP', '/ruvamco/services')
+
+        streams_to_query = []
+        if component == 'all':
+            streams_to_query = ['broker', 'worker', 'control-plane']
+        else:
+            streams_to_query = [component]
+
+        for stream_name in streams_to_query:
+            try:
+                response = logs_client.get_log_events(
+                    logGroupName=log_group,
+                    logStreamName=stream_name,
+                    limit=tail,
+                    startFromHead=False,
+                )
+                events = response.get('events', [])
+                if events:
+                    click.echo(f"\n── {stream_name} ──")
+                    for event in events:
+                        ts = datetime.fromtimestamp(event['timestamp'] / 1000).strftime('%H:%M:%S')
+                        click.echo(f"  {ts}  {event['message']}")
+            except logs_client.exceptions.ResourceNotFoundException:
+                continue
+
+        return
+    except Exception:
+        pass  # Fall through to Docker
+
+    # Fallback: docker-compose logs (local development)
+    import subprocess
+
+    docker_cmd = ['docker-compose', 'logs', f'--tail={tail}']
+    if follow:
+        docker_cmd.append('--follow')
+    if component != 'all':
+        docker_cmd.append(component)
+
+    try:
+        result = subprocess.run(docker_cmd, capture_output=not follow, text=True)
+        if not follow and result.stdout:
+            click.echo(result.stdout)
+        if result.returncode != 0 and result.stderr:
+            click.echo(f"⚠️  {result.stderr.strip()}")
+    except FileNotFoundError:
+        click.echo("⚠️  Neither CloudWatch nor Docker available.")
+        click.echo("   Set RUVAMCO_LOG_GROUP for CloudWatch, or install Docker for local logs.")
 
 @cli.command()
 def version():

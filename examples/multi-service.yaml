@@ -1,0 +1,77 @@
+# ─────────────────────────────────────────────────────────────────
+# RUVAMCO — Multi-Service Configuration
+#
+# Provisions multiple edge routes for a microservices architecture.
+# Each service gets its own domain, auth, and rate limits.
+# ─────────────────────────────────────────────────────────────────
+
+apiVersion: ruvamco/v1
+kind: EdgeRouteList
+metadata:
+  namespace: ecommerce
+items:
+  - kind: EdgeRoute
+    metadata:
+      name: storefront-api
+    spec:
+      plan: business
+      domain: api.store.example.com
+      backend:
+        type: kubernetes
+        target: storefront.ecommerce.svc.cluster.local
+        port: 8080
+      rateLimit:
+        requestsPerSecond: 5000
+        burst: 10000
+      auth:
+        type: jwt
+        jwksUrl: https://auth.example.com/.well-known/jwks.json
+      timeouts:
+        request: 15
+        connection: 5
+
+  - kind: EdgeRoute
+    metadata:
+      name: inventory-api
+    spec:
+      plan: business
+      domain: inventory.store.example.com
+      backend:
+        type: kubernetes
+        target: inventory.ecommerce.svc.cluster.local
+        port: 8080
+      rateLimit:
+        requestsPerSecond: 2000
+        burst: 4000
+      auth:
+        type: api_key
+      timeouts:
+        request: 10
+        connection: 3
+
+  - kind: EdgeRoute
+    metadata:
+      name: checkout-api
+    spec:
+      plan: enterprise
+      domain: checkout.store.example.com
+      backend:
+        type: kubernetes
+        target: checkout.ecommerce.svc.cluster.local
+        port: 8443
+        protocol: HTTP2
+      rateLimit:
+        requestsPerSecond: 1000
+        burst: 2000
+      auth:
+        type: jwt
+        jwksUrl: https://auth.example.com/.well-known/jwks.json
+      circuitBreaker:
+        maxConnections: 1024
+        maxPendingRequests: 512
+      retries:
+        attempts: 2
+        perTryTimeout: 10
+      timeouts:
+        request: 30
+        connection: 5

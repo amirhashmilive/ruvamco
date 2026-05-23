@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ruvamco-broker
+  namespace: ruvamco
+  labels:
+    app.kubernetes.io/name: ruvamco-broker
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - broker.ruvamco.io
+      secretName: ruvamco-broker-tls
+  rules:
+    - host: broker.ruvamco.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ruvamco-broker
+                port:
+                  name: http
